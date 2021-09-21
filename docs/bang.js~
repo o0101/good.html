@@ -149,7 +149,7 @@
             } else {
               const shadow = this.attachShadow({mode:'open'});
               //console.log({observer});
-              observer.observe(shadow, OBSERVE_OPTS);
+              //observer.observe(shadow, OBSERVE_OPTS);
               cooked.to(shadow, 'insert');
               const listening = shadow.querySelectorAll(CONFIG.EVENTS.map(e => `[${e}]`).join(', '));
               listening.forEach(node => this.handleAttrs(node.attributes, {node, originals: true}));
@@ -360,7 +360,6 @@
 
       // replace the bang node (comment) with its actual custom element node
       const actualElement = createElement(name, data);
-      current.linkedCustomElement = actualElement;
       current.parentNode.replaceChild(actualElement, current);
     }
 
