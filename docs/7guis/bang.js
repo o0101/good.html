@@ -12,7 +12,7 @@
       scriptFile: 'script.js',
       styleFile: 'style.css',
       bangKey: '_bang_key',
-      componentsPath: `${location.pathname}/components`,
+      componentsPath: './components',
       allowUnset: false,
       unsetPlaceholder: '',
       EVENTS: `error load click pointerdown pointerup pointermove mousedown mouseup 
