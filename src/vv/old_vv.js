@@ -8,7 +8,7 @@
     const attrskip = attrmarkup;
 
   // constants
-    const DEBUG             = true;
+    const DEBUG             = false;
     const NULLFUNC          = () => void 0;
     /* eslint-disable no-useless-escape */
     const KEYMATCH          = /(?:<!\-\-)?(key\d+)(?:\-\->)?/gm;
@@ -34,7 +34,6 @@
       innerhtml   (frag,elem) { elem.innerHTML = ''; elem.appendChild(frag) }
       insert      (frag,node) { node.replaceChildren(frag) }
     };
-    const REMOVE_MAP = new Map();
 
   // logging
     globalThis.onerror = (...v) => (console.log(v, v[0]+'', v[4] && v[4].message, v[4] && v[4].stack), true);
@@ -132,7 +131,6 @@
         externals,
         v:Object.values(vmap),
         cacheKey,
-        instance,
         to,
         update,
         code:CODE,
@@ -145,9 +143,6 @@
         } else {
           cache[cacheKey] = retVal;
         }
-        retVal.nodes.forEach(node => {
-          REMOVE_MAP.set(node, JSON.stringify({cacheKey, instanceKey: instance.key+''}));
-        });
       }
 
       return retVal;
@@ -405,20 +400,8 @@
         const dn = diffNodes(oldNodes,newVal.nodes);
         if ( dn.size ) {
           const f = document.createDocumentFragment();
-          const killSet = new Set();
           dn.forEach(n => {
             f.appendChild(n);
-            if ( n.nodeType === Node.COMMENT_NODE && n.textContent.match(/key\d+/) ) return;
-            const kill = REMOVE_MAP.get(n);
-            killSet.add(kill);
-          });
-          killSet.forEach(kill => {
-            const {cacheKey, instanceKey} = JSON.parse(kill);
-            if ( cacheKey && instanceKey ) {
-              cache[cacheKey].instances[instanceKey] = null;
-            } else if ( cacheKey ) {
-              cache[cacheKey] = null;
-            }
           });
         }
         state.oldNodes = newVal.nodes || [lastAnchor];
@@ -811,11 +794,9 @@
                 firstCall = true;
               } else {
                 if ( instance.kill === true ) {
-                  cached = cache[cacheKey]; 
-                  if ( cached && cached.instances ) {
-                    cached.instances[instance.key] = null;
-                  }
+                  // cached = cached[cacheKey]; // ? or cached = null ? 
                   cached = null;
+                  cached.instances[instance.key] = null;
                   firstCall = true;
                 } else {
                   firstCall = false;
@@ -826,7 +807,7 @@
             firstCall = false;
           }
         }
-        //console.log({cached,firstCall,instance});
+        console.log({cached,firstCall,instance});
         return {cached,firstCall};
       }
 
