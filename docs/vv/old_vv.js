@@ -131,7 +131,6 @@
         externals,
         v:Object.values(vmap),
         cacheKey,
-        instance,
         to,
         update,
         code:CODE,
@@ -403,7 +402,6 @@
           const f = document.createDocumentFragment();
           dn.forEach(n => {
             f.appendChild(n);
-            console.log(`Node removed`, n);
           });
         }
         state.oldNodes = newVal.nodes || [lastAnchor];
@@ -796,11 +794,9 @@
                 firstCall = true;
               } else {
                 if ( instance.kill === true ) {
-                  cached = cache[cacheKey]; 
-                  if ( cached && cached.instances ) {
-                    cached.instances[instance.key] = null;
-                  }
+                  // cached = cached[cacheKey]; // ? or cached = null ? 
                   cached = null;
+                  cached.instances[instance.key] = null;
                   firstCall = true;
                 } else {
                   firstCall = false;
@@ -811,7 +807,7 @@
             firstCall = false;
           }
         }
-        //console.log({cached,firstCall,instance});
+        console.log({cached,firstCall,instance});
         return {cached,firstCall};
       }
 
