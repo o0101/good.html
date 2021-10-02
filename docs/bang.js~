@@ -214,14 +214,12 @@
           if ( ! this.counts.stop ) {
             this.counts.finished++;
           } else return;
-          /*
-            await sleep(100);
-            if ( this.counts.finished >= this.counts.started ) {
-              //console.log(this.counts);
-              this.classList.add('bang-styled');
-              this.counts.stop = true;
-            }
-          */
+          await sleep(100);
+          if ( this.counts.finished >= this.counts.started ) {
+            //console.log(this.counts);
+            this.classList.add('bang-styled');
+            this.counts.stop = true;
+          }
         });
       }
     };
@@ -252,7 +250,7 @@
         });
       
       self.customElements.define(name, component);
-      DEBUG && self.customElements.whenDefined(name).then(obj => say('log',name, component, 'defined', obj));
+      DEBUG && self.customElements.whenDefined(name).then(obj => say('log',name, 'defined', obj));
     }
 
     function undoState(key, transform = x => x) {
@@ -480,7 +478,7 @@
             ${await fetchStyle(name).then(e => {
               if ( e instanceof Error ) return `/* no ${name}/style.css defined */`;
               return e;
-            }).catch(e => `/* no ${name}/style.css defined */`)}
+            })}
           </style>${text}`;
         }
         comp && comp.setVisible();
@@ -528,15 +526,15 @@
         const {addedNodes} = record;
         if ( !addedNodes ) return;
         Array.from(addedNodes).map(node => {
-          const descendentsCount = findBangs(transformBang, node);
+          const descendents = findBangs(transformBang, node);
           const furthestLazy = furthest(node, '[lazy]');
           if ( furthestLazy ) {
             if ( furthestLazy.counts ) {
-              furthestLazy.counts.started += descendentsCount;
-              //console.log('lazy', furthestLazy, 'adding', descendentsCount, 'descendents');
+              furthestLazy.counts.started += descendents;
+              console.log('lazy', furthestLazy, 'adding', descendents, 'descendents');
             } else console.log(furthestLazy, node);
           }
-          return descendentsCount;
+          return descendents;
         });
       });
     }
