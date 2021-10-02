@@ -1,4 +1,11 @@
-:not(:defined), .bang-el:not(.bang-styled) {
+:host(:not(:defined)), :host([state]:not(.bang-styled),.bang-el:not(.bang-styled)) {
+  display: none;
+}
+
+:not(:defined), [state]:not(.bang-styled), .bang-el:not(.bang-styled) {
+  display: none;
+}
+:host:not(.bang-styled) {
   display: none;
 }
 
