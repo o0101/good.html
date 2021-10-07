@@ -140,7 +140,7 @@
           this.prepareVisibility();
         }
         const state = this.handleAttrs(this.attributes);
-        if ( OPTIMIZE && state ) {
+        if ( OPTIMIZE ) {
           const nextState = JS(state);
           if ( this.alreadyPrinted && this.lastState === nextState ) {
             if ( DEBUG ) {
@@ -221,18 +221,8 @@
       // Web Components methods
       attributeChangedCallback(name, oldValue, value) {
         // setting the state attribute casues the custom element to re-render
-        if ( name === 'state' && !isUnset(oldValue) ) {
+        if ( name === 'state' ) {
           this.update();
-          /*
-            if ( ! Dependents.has(value) ) {
-              Dependents.set(value, Dependents.get(oldValue));
-            }
-            Dependents.delete(oldValue);
-            if ( STATE.get(oldValue+'.json.last') !== JS(STATE.get(value)) ) {
-              DEBUG && say('log',`Changing state, so calling print.`, oldValue, value, this);
-              this.update();
-            }
-          */
         }
       }
 
@@ -246,7 +236,7 @@
 
       // private methods
       handleAttrs(attrs, {node, originals} = {}) {
-        let state;
+        let state = {};
 
         if ( ! node ) node = this;
 
@@ -261,11 +251,9 @@
             
             if ( isUnset(stateObject) ) {
               console.warn(node);
-              self.STATE = STATE;
-              console.warn(new ReferenceError(`
+              throw new ReferenceError(`
                 <${node.localName}> constructor passed state key ${stateKey} which is unset. It must be set.
-              `));
-              break;
+              `);
             }
             
             state = stateObject;
@@ -309,7 +297,6 @@
       }
 
       printShadow(state) {
-        if ( ! state ) return;
         return fetchMarkup(this.#name, this).then(markup => this.cookMarkup(markup, state))
         .catch(err => DEBUG && say('warn!',err))
         .finally(this.markLoaded);
@@ -318,7 +305,7 @@
 
     class StateKey extends String {
       constructor (keyNumber) {
-        if ( keyNumber == undefined ) super(`system-key:${systemKeys+=2}`); 
+        if ( keyNumber == undefined ) super(`system-key:${systemKeys++}`); 
         else super(`client-key:${keyNumber}`);
       }
     }
