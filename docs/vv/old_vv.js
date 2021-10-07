@@ -1,6 +1,7 @@
 // vanillaview.js
   // imports
     import {CODE} from './common.js';
+    import T from './types.js';
 
   // backwards compatible alias
     const skip = markup;
@@ -13,9 +14,7 @@
     const KEYMATCH          = /(?:<!\-\-)?(key\d+)(?:\-\->)?/gm;
     /* eslint-enable no-useless-escape */
     const ATTRMATCH         = /\w+=/;
-    const JOINER            = '<link rel=join>';
     const KEYLEN            = 20;
-    const DOM_PARSER        = new DOMParser;
     const XSS               = () => `Possible XSS / object forgery attack detected. ` +
                               `Object code could not be verified.`;
     const OBJ               = () => `Object values not allowed here.`;
@@ -32,23 +31,16 @@
       afterend    (frag,elem) { elem.parentNode.insertBefore(frag,elem.nextSibling) }
       replace     (frag,elem) { elem.parentNode.replaceChild(frag,elem) }
       afterbegin  (frag,elem) { elem.insertBefore(frag,elem.firstChild) }
-      innerhtml   (frag,elem) { elem.replaceChildren(); elem.appendChild(frag) }
+      innerhtml   (frag,elem) { elem.innerHTML = ''; elem.appendChild(frag) }
       insert      (frag,node) { node.replaceChildren(frag) }
     };
-    const REMOVE_MAP        = new Map();
-    const Template          = document.createElement('template');
-    const DIV               = document.createElement('div');
-    const POS               = 'beforeend';
-    const EMPTY = '';
-    const {stringify:_STR} = JSON;
-    const JS = o => _STR(o, null, EMPTY);
 
   // logging
-    globalThis.onerror = (...v) => (console.log(v, v[0]+EMPTY, v[4] && v[4].message, v[4] && v[4].stack), true);
+    globalThis.onerror = (...v) => (console.log(v, v[0]+'', v[4] && v[4].message, v[4] && v[4].stack), true);
 
   // type functions
-    const isKey             = v => !!v && (typeof v.key === 'string' || typeof v.key === 'number') && Object.getOwnPropertyNames(v).length <= 2;
-    const isHandlers        = v => typeof v === "object";
+    const isKey             = v => T.check(T`Key`, v); 
+    const isHandlers        = v => T.check(T`Handlers`, v);
 
   // cache 
     const cache = {};
@@ -57,7 +49,7 @@
   // main exports 
     Object.assign(s,{say,attrskip,skip,attrmarkup,markup,guardEmptyHandlers,die});
 
-    Object.assign(globalThis, {vanillaview: {c, s}}); 
+    Object.assign(globalThis, {vanillaview: {c, s, T}}); 
 
     export async function s(p,...v) {
       const that = this;
@@ -104,7 +96,7 @@
 
       if ( useCache ) {
         (instance = (v.find(isKey) || {}));
-        cacheKey = p.join(JOINER);
+        cacheKey = p.join('<link rel=join>');
         const {cached,firstCall} = isCached(cacheKey,v,instance);
        
         if ( ! firstCall ) {
@@ -123,7 +115,7 @@
       const vmap = {};
       const V = v.map(replaceValWithKeyAndOmitInstanceKey(vmap));
       const externals = [];
-      let str = EMPTY;
+      let str = '';
 
       while( p.length > 1 ) str += p.shift() + V.shift();
       str += p.shift();
@@ -139,11 +131,10 @@
         externals,
         v:Object.values(vmap),
         cacheKey,
-        instance,
         to,
         update,
         code:CODE,
-        nodes:Array.from(frag.childNodes)
+        nodes:[...frag.childNodes]
       });
 
       if ( useCache ) {
@@ -152,10 +143,6 @@
         } else {
           cache[cacheKey] = retVal;
         }
-        retVal.nodes.forEach(node => {
-          REMOVE_MAP.set(node, {ck:cacheKey, ik: instance.key+EMPTY});
-          DEBUG && console.log('rm set', node);
-        });
       }
 
       return retVal;
@@ -166,24 +153,24 @@
       if ( typeof x === 'string' ) return x;
       else 
 
-      if ( typeof x === 'number' ) return x+EMPTY;
+      if ( typeof x === 'number' ) return x+'';
       else
 
-      if ( typeof x === 'boolean' ) return x+EMPTY;
+      if ( typeof x === 'boolean' ) return x+'';
       else
 
-      if ( x instanceof Date ) return x+EMPTY;
+      if ( x instanceof Date ) return x+'';
       else
 
       if ( isUnset(x) ) {
-        if ( that.CONFIG.allowUnset ) return that.CONFIG.unsetPlaceholder || EMPTY;
+        if ( that.CONFIG.allowUnset ) return that.CONFIG.unsetPlaceholder || '';
         else {
           throw new TypeError(`Value cannot be unset, was: ${x}`);
         }
       }
       else
 
-      if ( x instanceof Promise ) return await process(that, await x.catch(err => err+EMPTY), state);
+      if ( x instanceof Promise ) return await process(that, await x.catch(err => err+''), state);
       else
 
       if ( x instanceof Element ) return x.outerHTML;
@@ -191,24 +178,25 @@
 
       if ( x instanceof Node ) return x.textContent;
 
-      const isVVArray   = Array.isArray(x) && (x.length === 0 || Array.isArray(x[0].nodes));
+      const isVVArray   = T.check(T`VanillaViewArray`, x);
 
       if ( isIterable(x) && ! isVVArray ) {
         // if an Array or iterable is given then
         // its values are recursively processed via this same function
         return process(that, (await Promise.all(
           (
-            await Promise.all(Array.from(x)).catch(e => err+EMPTY)
+            await Promise.all(Array.from(x)).catch(e => err+'')
           ).map(v => process(that, v, state))
         )), state);
       }
 
 
       const isVVK = isKey(x);
-      const isVV      = x.code === CODE && Array.isArray(x.nodes);
-      const isMAO = x.code === CODE && typeof x.str === "string";
-      if ( isVVArray || isVVK || isMAO || isVV ) {
-        DEBUG && console.log('vv', x, {isVVArray, isVVK, isMAO, isVV});
+      const isMO    = T.check(T`MarkupObject`, x);
+      const isMAO = T.check(T`MarkupAttrObject`, x);
+      const isVV      = T.check(T`Component`, x);
+      if ( isVVArray || isVVK || isMO || isMAO || isVV ) {
+        DEBUG && console.log('vv', x, {isVVArray, isVVK, isMO, isMAO, isVV});
         return isVVArray ? join(x) : x; // let vanillaview guardAndTransformVal handle
       }
 
@@ -237,7 +225,7 @@
           // be represented by many objects
 
         if ( Object.prototype.hasOwnProperty.call(x, that.CONFIG.bangKey) ) {
-          stateKey = new that.StateKey(x[that.CONFIG.bangKey])+EMPTY;
+          stateKey = new that.StateKey(x[that.CONFIG.bangKey])+'';
           // in that case, replace the previously saved object with the same logical identity
           const oldX = that.STATE.get(stateKey);
           that.STATE.delete(oldX);
@@ -249,29 +237,28 @@
         else  /* or the system can come up with a state key */
 
         {
-          const jsx = JS(x)
           if ( that.STATE.has(x) ) {
             stateKey = that.STATE.get(x);
             const lastXJSON = that.STATE.get(stateKey+'.json.last');
-            if ( jsx !== lastXJSON ) {
+            if ( JSON.stringify(x) !== lastXJSON ) {
               that.STATE.delete(lastXJSON); 
               if ( stateKey.startsWith('system-key') ) {
                 that.STATE.delete(stateKey);
-                stateKey = new that.StateKey()+EMPTY;
+                stateKey = new that.StateKey()+'';
               }
               that.STATE.set(stateKey, x);
               that.STATE.set(x, stateKey);
             }
           } else {
-            stateKey = new that.StateKey()+EMPTY;
+            stateKey = new that.StateKey()+'';
             that.STATE.set(stateKey, x);
             that.STATE.set(x, stateKey);
           }
-          that.STATE.set(jsx, stateKey+'.json.last');
-          that.STATE.set(stateKey+'.json.last', jsx);
+          that.STATE.set(JSON.stringify(x), stateKey+'.json.last');
+          that.STATE.set(stateKey+'.json.last', JSON.stringify(x));
         }
 
-        stateKey += EMPTY;
+        stateKey += '';
         DEBUG && say('log',{stateKey});
         return stateKey;
       }
@@ -413,24 +400,8 @@
         const dn = diffNodes(oldNodes,newVal.nodes);
         if ( dn.size ) {
           const f = document.createDocumentFragment();
-          const killSet = new Set();
           dn.forEach(n => {
             f.appendChild(n);
-            if ( n.linkedCustomElement ) {
-              f.appendChild(n.linkedCustomElement);
-            }
-            if ( n.nodeType === Node.COMMENT_NODE && n.textContent.match(/key\d+/) ) return;
-            const kill = REMOVE_MAP.get(n);
-            DEBUG && console.log('rm get node', n);
-            killSet.add(JS(kill));
-          });
-          killSet.forEach(kill => {
-            const {ck: cacheKey, ik: instanceKey} = JSON.parse(kill);
-            if ( cacheKey && instanceKey ) {
-              cache[cacheKey].instances[instanceKey] = null;
-            } else if ( cacheKey ) {
-              cache[cacheKey] = null;
-            }
           });
         }
         state.oldNodes = newVal.nodes || [lastAnchor];
@@ -464,33 +435,15 @@
 
         node.nodeValue = newValue;
 
-        if ( node.linkedCustomElement && newValue !== oldVal ) {
+        if ( node.linkedCustomElement && newValue.match(/state[\s\S]*=/gm) ) {
           DEBUG && console.log('Updating linked customElement', node, newVal, node.linkedCustomElement);
-          updateLinkedCustomElement(node);
+          node.linkedCustomElement.setAttribute('state', newVal);
         }
 
         state.oldVal = newVal;
       }
 
     // element attribute functions
-      function updateLinkedCustomElement(node) {
-        const lce = node.linkedCustomElement;
-        const span = toDOM(`<span ${node.textContent}></span>`).firstChild;
-        const toRemove = new Set(
-          getAttributes(lce)
-            .filter(({name}) => !name.startsWith('on'))
-            .map(({name}) => name)
-        );
-        getAttributes(span).forEach(({name, value}) => {
-          if ( name === lce.localName ) return; // i.e., it's the bang tag name
-          if ( name.startsWith('on') ) return; // we don't handle event handlers here, that's in bang
-          DEBUG && console.log(`setting ${name}=${value} on`, lce, node);
-          lce.setAttribute(name, value);
-          toRemove.delete(name);
-        });
-        toRemove.forEach(name => lce.removeAttribute(name));
-      }
-
       function handleElement({node,vmap,externals}) {
         getAttributes(node).forEach(({name,value} = {}) => {
           const attrState = {node, vmap, externals, name, lengths: []};
@@ -539,7 +492,7 @@
         return (newVal) => {
           if ( oldName == newVal ) return;
           val.val = newVal;
-          const attr = node.hasAttribute(oldName) ? oldName : EMPTY
+          const attr = node.hasAttribute(oldName) ? oldName : ''
           if ( attr !== newVal ) {
             if ( attr ) {
               node.removeAttribute(oldName);
@@ -623,7 +576,7 @@
           node.removeEventListener(name, oldVal, flags);
         }
         node.addEventListener(name, newVal, flags); 
-        reliablySetAttribute(node, name, EMPTY);
+        reliablySetAttribute(node, name, '');
       } else {
         if ( oldVal ) {
           const index = externals.indexOf(oldVal);
@@ -670,7 +623,7 @@
 
     function updateAttrWithHandlersValue(newVal, scope) {
       let {oldVal,node,externals,} = scope;
-      if ( !!oldVal && typeof oldVal === 'object'  ) {
+      if ( !!oldVal && T.check(T`Handlers`, oldVal) ) {
         Object.entries(oldVal).forEach(([eventName,funcVal]) => {
           if ( eventName !== 'bond' ) {
             let flags = {};
@@ -744,7 +697,7 @@
       let newAttrValue;
       
       if ( name == "class" ) {
-        const spacer = oldVal.length == 0 ? ' ' : EMPTY;
+        const spacer = oldVal.length == 0 ? ' ' : '';
         newAttrValue = before + spacer + newVal + spacer + after;
       } else {
         newAttrValue = before + newVal + after;
@@ -754,7 +707,7 @@
         console.log('style attribute', {newAttrValue, before, newVal, after});
       }
 
-      DEBUG && console.log(JS({
+      DEBUG && console.log(JSON.stringify({
         newVal,
         valIndex,
         lengths,
@@ -794,17 +747,13 @@
     }
 
     function getType(val) {
-      const to = typeof val;
-      const type = to === 'function' ? 'function' :
-        val.code === CODE && Array.isArray(val.nodes) ? 'vanillaviewobject' : 
-        val.code === CODE && typeof val.str === 'string' ? 'markupattrobject' :
-        Array.isArray(val) && (val.length === 0 || (
-          val[0].code === CODE && Array.isArray(val[0].nodes) 
-        )) ? 'vanillaviewarray' : 
-        Array.isArray(val) && (val.length === 0 || (
-          typeof val[0] === 'function'
-        )) ? 'funcarray' : 
-        to === 'object' ? 'handlers' : 
+      const type = T.check(T`Function`, val) ? 'function' :
+        T.check(T`Handlers`, val) ? 'handlers' : 
+        T.check(T`VanillaViewObject`, val) ? 'vanillaviewobject' : 
+        T.check(T`MarkupObject`, val) ? 'markupobject' :
+        T.check(T`MarkupAttrObject`, val) ? 'markupattrobject' :
+        T.check(T`VanillaViewArray`, val) ? 'vanillaviewarray' : 
+        T.check(T`FuncArray`, val) ? 'funcarray' : 
         'default'
       ;
       return type;
@@ -845,11 +794,9 @@
                 firstCall = true;
               } else {
                 if ( instance.kill === true ) {
-                  cached = cache[cacheKey]; 
-                  if ( cached && cached.instances ) {
-                    cached.instances[instance.key] = null;
-                  }
+                  // cached = cached[cacheKey]; // ? or cached = null ? 
                   cached = null;
+                  cached.instances[instance.key] = null;
                   firstCall = true;
                 } else {
                   firstCall = false;
@@ -860,7 +807,7 @@
             firstCall = false;
           }
         }
-        //console.log({cached,firstCall,instance});
+        console.log({cached,firstCall,instance});
         return {cached,firstCall};
       }
 
@@ -870,12 +817,12 @@
       // And even tho it is in the location of a template value replacement
       // Which would normally be the treated as String
       function markup(str) {
-        str = isUnset(str) ? EMPTY : str; 
+        str = T.check(T`None`, str) ? '' : str; 
         const frag = toDOM(str);
         const retVal = {
           type: 'MarkupObject',
           code:CODE,
-          nodes:Array.from(frag.childNodes),
+          nodes:[...frag.childNodes],
           externals: []
         };
         return retVal;
@@ -884,7 +831,7 @@
       // Returns an object that VanillaView treats, again, as markup
       // But this time markup that is OKAY to have within a quoted attribute
       function attrmarkup(str) {
-        str = isUnset(str) ? EMPTY : str; 
+        str = T.check(T`None`, str) ? '' : str; 
         str = str.replace(/"/g,'&quot;');
         const retVal = {
           type: 'MarkupAttrObject',
@@ -901,7 +848,7 @@
           } 
           return val;
         } else {
-          if ( isUnset(val) ) {
+          if ( T.check(T`None`, val) ) {
             return NULLFUNC;
           }
         }
@@ -917,12 +864,12 @@
       function replaceValWithKeyAndOmitInstanceKey(vmap) {
         return (val,vi) => {
           // omit instance key
-          if ( isKey(val) ) {
-            return EMPTY;
+          if ( T.check(T`Key`, val) ) {
+            return '';
           }
-          const key = ('key'+Math.random()).replace('.',EMPTY).padEnd(KEYLEN,'0').slice(0,KEYLEN);
+          const key = ('key'+Math.random()).replace('.','').padEnd(KEYLEN,'0').slice(0,KEYLEN);
           let k = key;
-          if ( val.code === CODE && Array.isArray(val.nodes) ) {
+          if ( T.check(T`VanillaViewObject`, val) || T.check(T`MarkupObject`, val) ) {
             k = `<!--${k}-->`;
           }
           vmap[key.trim()] = {vi,val,replacers:[]};
@@ -931,32 +878,49 @@
       }
 
       function toDOM(str) {
-        DIV.replaceChildren();
-        DIV.insertAdjacentHTML(POS, `<template>${str}</template>`);
-        return DIV.firstElementChild.content;
-      }
-
-      function toDOM_(str) {
-        Template.innerHTML = str;
-        return Template.content;
+        const templateEl = (new DOMParser).parseFromString(
+          `<template>${str}</template>`,"text/html"
+        ).head.firstElementChild;
+        let f;
+        if ( templateEl instanceof HTMLTemplateElement ) { 
+          f = templateEl.content;
+          f.normalize();
+          return f;
+        } else {
+          throw new TypeError(`Could not find template element after parsing string to DOM:\n=START=\n${str}\n=END=`);
+        }
       }
 
       function guardAndTransformVal(v) {
-        const isVVArray   = Array.isArray(v) && (v.length === 0 || Array.isArray(v[0].nodes));
-        const isNotSet         = isUnset(v);
-        const isForgery = v.code !== CODE && Array.isArray(v.nodes);
-        const isObject        = typeof v === 'object';
+        const isFunc          = T.check(T`Function`, v);
+        const isUnset         = T.check(T`None`, v);
+        const isObject        = T.check(T`Object`, v);
+        const isVanillaViewArray   = T.check(T`VanillaViewArray`, v);
+        const isFuncArray     = T.check(T`FuncArray`, v);
+        const isMarkupObject    = T.check(T`MarkupObject`, v);
+        const isMarkupAttrObject= T.check(T`MarkupAttrObject`, v);
+        const isVanillaView        = T.check(T`VanillaViewObject`, v);
+        const isForgery       = T.check(T`VanillaViewLikeObject`, v)  && !isVanillaView; 
 
-        if ( isVVArray )      return join(v); 
+        if ( isFunc )             return v;
+        if ( isVanillaView )           return v;
         if ( isKey(v) )           return v;
-        if ( v.code === CODE )    return v;
+        if ( isHandlers(v) )      return v;
+        if ( isVanillaViewArray )      return join(v); 
+        if ( isFuncArray )        return v;
+        if ( isMarkupObject )     return v;
+        if ( isMarkupAttrObject)  return v;
 
-        if ( isNotSet )            die({error: UNSET()});
+        if ( isUnset )            die({error: UNSET()});
         if ( isForgery )          die({error: XSS()});
 
-        if ( isObject ) die({error: OBJ()});
+        if ( isObject )       {
+          if ( Object.keys(v).join(',') === "key" ) {
+            die({error: KEY(v)});    
+          } else die({error: OBJ()});
+        }
 
-        return v+EMPTY;
+        return v+'';
       }
 
       function join(os) {
@@ -964,12 +928,12 @@
         const bigNodes = [];
         const v = [];
         const oldVals = [];
-        for( const o of os ) {
+        os.forEach(o => {
           //v.push(...o.v); 
           //oldVals.push(...o.oldVals);
           externals.push(...o.externals);
           bigNodes.push(...o.nodes);
-        }
+        });
         DEBUG && console.log({oldVals,v});
         const retVal = {v,code:CODE,oldVals,nodes:bigNodes,to,update,externals};
         return retVal;
@@ -1027,7 +991,7 @@
               ret = true;
               break;
             default:
-              ret = JS(oldVal) !== JS(newVal);
+              ret = JSON.stringify(oldVal) !== JSON.stringify(newVal);
               break;
             /* eslint-enable no-fallthrough */
           }
@@ -1041,22 +1005,22 @@
     function die(msg,err) {
       if (DEBUG && err) console.warn(err);
       msg.stack = ((DEBUG && err) || new Error()).stack.split(/\s*\n\s*/g);
-      throw JS(msg,null,2);
+      throw JSON.stringify(msg,null,2);
     }
 
     function say(msg) {
       if ( DEBUG ) {
-        console.log(JS(msg,showNodes,2));
+        console.log(JSON.stringify(msg,showNodes,2));
         console.info('.');
       }
     }
 
     function showNodes(k,v) {
       let out = v;
-      if ( v instanceof Node ) {
+      if ( T.check(T`>Node`, v) ) {
         out = `<${v.nodeName.toLowerCase()} ${
-          !v.attributes ? EMPTY : [...v.attributes].map(({name,value}) => `${name}='${value}'`).join(' ')}>${
-          v.nodeValue || (v.children && v.children.length <= 1 ? v.innerText : EMPTY)}`;
+          !v.attributes ? '' : [...v.attributes].map(({name,value}) => `${name}='${value}'`).join(' ')}>${
+          v.nodeValue || (v.children && v.children.length <= 1 ? v.innerText : '')}`;
       } else if ( typeof v === "function" ) {
         return `${v.name || 'anon'}() { ... }`
       }
