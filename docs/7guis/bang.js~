@@ -6,7 +6,6 @@
     const OPTIMIZE = true;
     const GET_ONLY = true;
     const MOBILE = isMobile();
-    const GC_TIMEOUT = 10000;
     const EMPTY = '';
     const {stringify:_STR} = JSON;
     const JS = o => _STR(o, null, EMPTY);
@@ -116,7 +115,6 @@
             }
           }
           this.checkLoad = countsChecker(this.counts);
-          this.loadKey = Math.random().toString(36);
 
         if ( this.hasAttribute('lazy') ) {
           this.isLazy = true;
@@ -188,7 +186,7 @@
 
       async untilLoaded() {
         const myDependentsLoaded = (await Promise.all(this.#dependents)).every(loaded => loaded);
-        const myContentLoaded = await becomesTrue(this.checkLoad, this.loadKey);
+        const myContentLoaded = await becomesTrue(this.checkLoad);
         return myContentLoaded && myDependentsLoaded;
       }
 
@@ -226,7 +224,6 @@
         // setting the state attribute casues the custom element to re-render
         if ( name === 'state' && !isUnset(oldValue) ) {
           this.update();
-          setTimeout(() => Dependents.delete(oldValue), GC_TIMEOUT);
           /*
             if ( ! Dependents.has(value) ) {
               Dependents.set(value, Dependents.get(oldValue));
@@ -705,7 +702,9 @@
       //console.log('records', records);
       for( const record of records ) {
         DEBUG && say('log',record);
-        for( const node of record.addedNodes ) {
+        const {addedNodes} = record;
+        if ( !addedNodes ) return;
+        for( const node of addedNodes ) {
           findBangs(transformBang, node);
         }
       }
@@ -1015,19 +1014,36 @@
       return Template.content;
     }
 
-    async function becomesTrue(check, key) {
+    async function becomesTrue(check = () => true, key) {
       const WaitKey = key || check;
       let waiters = Waiters.get(WaitKey);
+      let res;
+      const pr = new Promise(resolve => res = resolve);
 
       if ( ! waiters ) {
-        waiters = _becomesTrue(check).then(checkResult => {
-          setTimeout(() => Waiters.delete(WaitKey), GC_TIMEOUT);
-          return checkResult; 
-        });
+        const list = [];
+        waiters = {
+          WaitKey,
+          list,
+          event: _becomesTrue(check).then(() => {
+            for( const resolve of list.reverse() ) {
+              try {
+                resolve();
+              } catch(e) {
+                console.warn(e);
+              }
+            }
+            // Waiters.delete(WaitKey);
+          })
+        };
         Waiters.set(WaitKey, waiters);
         DEBUG && console.log('Setup waiter list', waiters);
+      } else if ( waiters.resolved ) {
+          res();
+        }
       }
-      const pr = new Promise(resolve => waiters.then(resolve));
+      waiters.list.push(res);
+      console.log(pr, check, key);
       return pr;
     }
 
