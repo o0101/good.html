@@ -19,7 +19,6 @@
     //const GENERATOR = (function*(){yield}()).constructor;
     const EMPTY = '';
     const {stringify:_STR} = JSON;
-    const Reserved = new Set(['_self', '_host', '_top']);
     const JS = o => _STR(o, Replacer, EMPTY);
     const LIGHTHOUSE = navigator.userAgent.includes("Chrome-Lighthouse");
     const DOUBLE_BARREL = /^\w+-(?:\w+-?)*$/; // note that this matches triple- and higher barrels, too
@@ -108,7 +107,6 @@
     let observer; // global mutation observer
     let systemKeys = 1;
     let _c$;
-    let firstState;
 
     const BangBase = (name) => class Base extends HTMLElement {
       static #activeAttrs = ['state']; // we listen for changes to these attributes only
@@ -146,7 +144,7 @@
             const deps = await findBangs(transformBang, shadow, ALL_DEPS);
             this.#dependents = deps.map(node => node.untilVisible());
           } else {
-            DEBUG && console.log('already has shadow', this);
+            console.log('already has shadow', this);
           }
         }
         this.markLoaded = async () => {
@@ -232,12 +230,8 @@
       updateIfChanged(state) {
         const {didChange} = stateChanged(state);
         if ( didChange ) {
-          const oKey = this.getAttribute('state');
+          const views = getViews(state);
           const newKey = updateState(state);
-          DEBUG && console.log({didChange, oKey, newKey}, this);
-          const views = Dependents.get(this) || new Set();
-          views.add(this);
-          Dependents.set(newKey, views);
           views.forEach(view => view.setAttribute('state', newKey));
         }
       }
@@ -445,26 +439,17 @@
       const stateJSON = JS(state);
       STATE.delete(oStateJSON);
       STATE.set(key, state);
-      DEBUG && console.log({key});
       const views = Dependents.get(oKey);
       if ( key.startsWith('system-key:') ) {
-        try {
-          STATE.delete(key);
-          STATE.delete(key+'.json.last');
-          key = new StateKey()+'';
-          STATE.set(key, state);
-          STATE.set(state, key);
-          if ( views ) {
-            views.forEach(view => view.setAttribute('state', key));
-          }
-          DEBUG && console.log({key, oKey});
-        } catch(e) {
-          console.warn(e);
-        }
+        STATE.delete(key);
+        STATE.delete(key+'.json.last');
+        key = new StateKey()+'';
+        STATE.set(key, state);
+        STATE.set(state, key);
+        views.forEach(view => view.setAttribute('state', key));
+        console.log({key, oKey});
       }
-      if ( views ) {
-        Dependents.set(key, views);
-      }
+      Dependents.set(key, views);
       STATE.set(key+'.json.last', stateJSON);
       STATE.set(stateJSON, key+'.json.last');
       return key;
@@ -517,11 +502,6 @@
       if ( rerender ) { // re-render only those components depending on that key
         const acquirers = Dependents.get(key);
         if ( acquirers ) acquirers.forEach(host => host.update());
-      }
-
-      if ( ! firstState ) {
-        firstState = state; 
-        console.log(`Set first state at key ${key}`, state);
       }
       
       return true;
@@ -619,7 +599,6 @@
             Dependents.set(stateKey, acquirers);
           }
           acquirers.add(node);
-          Dependents.set(node, acquirers);
         } else return;
       } else if ( originals ) { // set event handlers to custom element class instance methods
         if ( ! name.startsWith('on') ) return;
@@ -651,7 +630,7 @@
 
         if ( name === 'onbond' ) {
           if ( Func ) {
-            DEBUG && console.log(`Dereference bond function`, Func, node);
+            console.log(`Dereference bond function`);
             try {
               Func(node);
               //FIXME: should this actually be removed ? 
@@ -770,7 +749,6 @@
 
       self._states = [];
       Object.assign(globalThis, {
-        Dependents,
         STATE,
         CONFIG,
         F,
@@ -1063,12 +1041,10 @@
         const currentPath = ['this.'];
         while( node ) {
           if ( node[value] instanceof Function ) {
-            const retVal = {Func: node[value], path: currentPath.join(EMPTY), oNode};
-            /*
+            const retVal = {Func: node[value], path: currentPath.join(EMPTY)};
             if ( oNode.matches('.tab-selector :is(button, a)') ) {
               console.log({retVal});
             }
-            */
             return retVal;
           }
           currentPath.push( ONE_HIGHER );
@@ -1107,19 +1083,10 @@
 
     async function cook(markup, state) {
       let cooked = EMPTY;
-      if ( !state._top ) {
-        try {
-          Object.defineProperty(state, '_top', {value: firstState});
-        } catch(e) {
-          say('warn!',
-            `Cannot add '_top' self-reference property to state. 
-              This enables a component to inspect the top-level state object it is passed.`
-          );
-        }
-      }
       if ( !state._self ) {
         try {
           Object.defineProperty(state, '_self', {value: state});
+          //Object.defineProperty(state, 'state', {value: state});
         } catch(e) {
           say('warn!',
             `Cannot add '_self' self-reference property to state. 
@@ -1145,7 +1112,6 @@
         }
         return cooked;
       } catch(error) {
-        DEBUG && console.warn(error);
         say('error!', 'Template error', {markup, state, error});
         throw error;
       }
